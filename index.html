@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>E-luku laskuri (Energiatodistus)</title>
+  <script src="https://cdn.tailwindcss.com/3.3.0"></script>
+  <script src="https://unpkg.com/alpinejs@3.4.1/dist/cdn.min.js" defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    body { 
+        font-family: 'Inter', sans-serif; 
+    }
+    /* Fallback button styles in case Tailwind fails */
+    button[type="submit"], button:not([class*="bg-"]) {
+        background-color: #2563eb !important;
+        color: white !important;
+        padding: 0.75rem 2.5rem !important;
+        border-radius: 0.75rem !important;
+        font-weight: 600 !important;
+        font-size: 1.125rem !important;
+        border: none !important;
+        cursor: pointer !important;
+    }
+    button:disabled {
+        background-color: #9ca3af !important;
+        cursor: not-allowed !important;
+    }
+    [x-cloak] { display: none !important; }
+
+    /* Yhtenäinen, puhdas syötekenttä (HIG-tyyli) */
+    .energy-input {
+        @apply w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition shadow-inner shadow-gray-50/50;
+    }
+    
+    /* Segmented control / List style for radios */
+    .hig-radio-container {
+      @apply bg-white border border-gray-200 rounded-xl overflow-hidden hig-shadow;
+    }
+    .hig-radio-label {
+        @apply flex items-center p-3 cursor-pointer transition relative hover:bg-gray-50;
+    }
+    .hig-radio-label:not(:last-child) {
+        @apply border-b border-gray-100;
+    }
+    .hig-radio-input {
+        @apply appearance-none h-4 w-4 rounded-full border border-gray-400 checked:border-4 checked:border-blue-500 checked:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+  <div class="w-full max-w-4xl mx-auto bg-white rounded-3xl hig-shadow p-6 md:p-10 border border-gray-200" x-data="energyCalculator()">
+    <div class="text-center mb-10">
+      <h1 class="text-4xl font-extrabold text-gray-800">Energiatodistuksen E-luku laskuri</h1>
+      <p class="text-gray-500 mt-2 text-lg">Laske rakennuksen E-luku käyttäen virallisia (2018) energiamuotokertoimia.</p>
+    </div>
+
+    <!-- Pääosa Alpine.js:n datan ja laskennan kanssa -->
+    <div class="space-y-8" @input.throttle.200ms="calculated = false">
+
+      <!-- 1. Rakennustyyppi ja pinta-ala -->
+      <div class="p-6 rounded-2xl bg-gray-50 border border-gray-200 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <h2 class="text-2xl font-bold text-gray-700 lg:col-span-3 mb-2">1. Rakennuksen perustiedot</h2>
+
+        <!-- Lämmitetty netto-pinta-ala -->
+        <div class="self-start lg:col-span-1">
+          <label for="area" class="block text-sm font-semibold text-gray-700 mb-2">Lämmitetty netto-pinta-ala (m²)</label>
+          <input type="number" id="area" x-model.number="area" placeholder="esim. 150" min="1" step="1" class="energy-input" required>
+          <p class="text-xs text-gray-400 mt-2">Pakollinen tieto E-luvun laskentaan.</p>
+        </div>
+        
+        <!-- Rakennustyyppi (HIG List Style) -->
+        <div class="lg:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Valitse rakennustyyppi (määrittää luokitusrajat)</label>
+          <div class="hig-radio-container grid grid-cols-2 md:grid-cols-3">
+              <label class="hig-radio-label border-b md:border-b-0 md:border-r">
+                  <input type="radio" x-model="buildingType" value="detached" name="building-type-radio" class="hig-radio-input">
+                  <span class="ml-4 text-base font-medium text-gray-800">Omakotitalo</span>
+              </label>
+              <label class="hig-radio-label border-b md:border-b-0 md:border-r">
+                  <input type="radio" x-model="buildingType" value="row" name="building-type-radio" class="hig-radio-input">
+                  <span class="ml-4 text-base font-medium text-gray-800">Rivitalo / Kaksikerroksinen</span>
+              </label>
+              <label class="hig-radio-label border-b md:border-b-0">
+                  <input type="radio" x-model="buildingType" value="apartment" name="building-type-radio" class="hig-radio-input">
+                  <span class="ml-4 text-base font-medium text-gray-800">Kerrostalo (3 krs tai enemmän)</span>
+              </label>
+              <label class="hig-radio-label border-r">
+                  <input type="radio" x-model="buildingType" value="office" name="building-type-radio" class="hig-radio-input">
+                  <span class="ml-4 text-base font-medium text-gray-800">Toimisto</span>
+              </label>
+              <label class="hig-radio-label border-r">
+                  <input type="radio" x-model="buildingType" value="school" name="building-type-radio" class="hig-radio-input">
+                  <span class="ml-4 text-base font-medium text-gray-800">Koulu / Päiväkoti</span>
+              </label>
+              <label class="hig-radio-label">
+                  <input type="radio" x-model="buildingType" value="hospital" name="building-type-radio" class="hig-radio-input">
+                  <span class="ml-4 text-base font-medium text-gray-800">Sairaala</span>
+              </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Vuotuinen toimitettu energia -->
+      <div class="p-6 rounded-2xl bg-gray-50 border border-gray-200">
+        <h2 class="text-2xl font-bold text-gray-700 mb-6">2. Toimitettu energia (kWh/vuosi)</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          
+          <!-- Sähkö (Kiinteistö) -->
+          <div>
+            <label for="property-electricity" class="block text-sm font-medium text-gray-600 mb-1">Sähkö (Kiinteistön käyttö)</label>
+            <input type="number" id="property-electricity" x-model.number="propertyElectricity" placeholder="0" min="0" step="1" class="energy-input">
+            <p class="text-xs text-gray-400 mt-1">IV, valaistus, laitteet. Kerroin: 1.20</p>
+          </div>
+          
+          <!-- Sähkö (Lämmitys) -->
+          <div>
+            <label for="heating-system-electricity" class="block text-sm font-medium text-gray-600 mb-1">Sähkö (Lämmitykseen)</label>
+            <input type="number" id="heating-system-electricity" x-model.number="heatingSystemElectricity" placeholder="0" min="0" step="1" class="energy-input">
+            <p class="text-xs text-gray-400 mt-1">Lämpöpumput, vastukset. Kerroin: 1.20</p>
+          </div>
+          
+          <!-- Kaukolämpö -->
+          <div>
+            <label for="district-heating" class="block text-sm font-medium text-gray-600 mb-1">Kaukolämpö</label>
+            <input type="number" id="district-heating" x-model.number="districtHeating" placeholder="0" min="0" step="1" class="energy-input">
+            <p class="text-xs text-gray-400 mt-1">Kerroin: 0.50</p>
+          </div>
+          
+          <!-- Kevyt polttoöljy -->
+          <div>
+            <label for="light-fuel-oil" class="block text-sm font-medium text-gray-600 mb-1">Kevyt polttoöljy</label>
+            <input type="number" id="light-fuel-oil" x-model.number="lightFuelOil" placeholder="0" min="0" step="1" class="energy-input">
+            <p class="text-xs text-gray-400 mt-1">Kerroin: 1.00</p>
+          </div>
+          
+          <!-- Puu / pelletti -->
+          <div>
+            <label for="renewable-solid" class="block text-sm font-medium text-gray-600 mb-1">Puu / pelletti (Uusiutuva)</label>
+            <input type="number" id="renewable-solid" x-model.number="renewableSolid" placeholder="0" min="0" step="1" class="energy-input">
+            <p class="text-xs text-gray-400 mt-1">Kerroin: 0.50</p>
+          </div>
+          
+          <!-- Aurinkosähkön tuotanto -->
+          <div>
+            <label for="solar-production" class="block text-sm font-medium text-gray-600 mb-1">Aurinkosähkö (PV)</label>
+            <input type="number" id="solar-production" x-model.number="solarProduction" placeholder="0" min="0" step="1" class="w-full px-4 py-3 bg-green-50/50 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition shadow-inner shadow-green-100/50">
+            <p class="text-xs text-gray-400 mt-1">Vähennys ostetusta sähköstä.</p>
+          </div>
+          
+        </div>
+      </div>
+      
+      <!-- Laske-nappi (Selkeä toiminto) -->
+      <div class="flex justify-center pt-2">
+        <button 
+          @click="calculate()" 
+          :disabled="area <= 0"
+          class="px-10 py-3 text-lg font-semibold text-white rounded-xl transition duration-300 hig-shadow"
+          :class="area > 0 ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800' : 'bg-gray-400 cursor-not-allowed'"
+        >
+          Laske E-luku
+        </button>
+      </div>
+
+      <!-- Tulososio (Selkeä, erottuva palaute) -->
+      <div x-show="area > 0 && calculated" x-cloak class="mt-10 p-8 rounded-2xl bg-white border border-blue-200 shadow-xl shadow-blue-50/50">
+        <h3 class="text-center text-2xl font-extrabold text-blue-700 mb-6">Laskentatulokset</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center justify-center max-w-lg mx-auto">
+          
+          <!-- E-luku Arvo -->
+          <div class="text-center pb-4 md:pb-0">
+            <p class="text-xl text-gray-500 font-semibold mb-1">Laskettu E-luku</p>
+            <p class="text-6xl font-extrabold" 
+               :class="energyClass.eValueColor" 
+               x-text="Math.round(eValue)">
+            </p>
+            <p class="text-lg font-medium text-gray-500">(kWh/m²a)</p>
+          </div>
+
+          <!-- Energiatehokkuusluokka -->
+          <div class="flex flex-col items-center border-t pt-4 md:border-t-0 md:pt-0 md:border-l border-gray-200">
+            <p class="text-xl text-gray-500 font-semibold mb-2">Energiatehokkuusluokka</p>
+            <div x-text="energyClass.class" :class="energyClass.color" class="flex items-center justify-center w-32 h-32 rounded-full text-white text-6xl font-extrabold shadow-lg hig-shadow">
+            </div>
+          </div>
+          
+        </div>
+
+        <p x-cloak class="text-center text-sm text-gray-500 mt-6 pt-4 border-t border-gray-100">
+          E-luku laskettu virallisilla (2018) kertoimilla.
+        </p>
+      </div>
+
+      <!-- Virheilmoitus (Selkeä palaute) -->
+      <div x-show="area <= 0 && isAnyInputUsed()" x-cloak class="mt-8 p-4 bg-red-50 border border-red-400 text-red-700 rounded-lg text-center">
+        <p class="font-medium">⚠️ Syötä kelvollinen lämmitetty netto-pinta-ala (m²) (vähintään 1 m²) jatkaaksesi.</p>
+      </div>
+      
+      <!-- 3. VIITE: E-LUVUN KÄYTETTÄVÄT KERTOIMET (NYKYINEN, 2018) -->
+      <div class="mt-10 pt-6 border-t border-gray-200">
+        <h3 class="text-xl font-bold text-gray-700 mb-4">3. E-luvun kertoimet (Lainmukaiset kertoimet)</h3>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+          <div class="p-3 bg-white rounded-lg border border-gray-200 hig-shadow">
+            <p class="text-sm text-gray-500">Sähkö</p>
+            <p class="text-2xl font-bold text-blue-600">1.20</p>
+          </div>
+          <div class="p-3 bg-white rounded-lg border border-gray-200 hig-shadow">
+            <p class="text-sm text-gray-500">Kaukolämpö</p>
+            <p class="text-2xl font-bold text-blue-600">0.50</p>
+          </div>
+          <div class="p-3 bg-white rounded-lg border border-gray-200 hig-shadow">
+            <p class="text-sm text-gray-500">Kevyt Polttoöljy</p>
+            <p class="text-2xl font-bold text-blue-600">1.00</p>
+          </div>
+          <div class="p-3 bg-white rounded-lg border border-gray-200 hig-shadow">
+            <p class="text-sm text-gray-500">Puu / Pelletti</p>
+            <p class="text-2xl font-bold text-blue-600">0.50</p>
+          </div>
+          <div class="p-3 bg-white rounded-lg border border-gray-200 hig-shadow col-span-2 md:col-span-1">
+            <p class="text-sm text-gray-500">Kaukojäähdytys</p>
+            <p class="text-2xl font-bold text-blue-600">0.28</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Alpine.js data and logic
+    function energyCalculator() {
+      return {
+        // 1. STATE AND INPUTS
+        buildingType: 'detached',
+        area: null,
+        propertyElectricity: 0,
+        heatingSystemElectricity: 0,
+        districtHeating: 0,
+        lightFuelOil: 0,
+        renewableSolid: 0,
+        solarProduction: 0,
+        
+        calculated: false,
+        
+        // E-value energy form coefficients (Hardcoded to 2018 as requested)
+        COEFF_2018: {
+            electricity: 1.20,      
+            districtHeating: 0.50,  
+            lightFuelOil: 1.0,      
+            renewableSolid: 0.50,   
+        },
+
+        // Calculate button pressed method
+        calculate() {
+            this.calculated = true;
+        },
+        
+        // Number formatting for larger numbers (e.g., 12 345)
+        formatNumber(num) {
+            // Safe check before calling toLocaleString
+            if (num === null || isNaN(num)) return '0';
+            return num.toLocaleString('fi-FI', { maximumFractionDigits: 0 });
+        },
+
+        // Fixed classification limits (Regulation 788/2017)
+        // [A-limit, B-limit, C-limit, D-limit, E-limit, F-limit]
+        FIXED_THRESHOLDS: {
+          row:        [80, 110, 150, 210, 340, 410],
+          apartment:  [75, 100, 130, 160, 190, 240],
+          office:     [80, 120, 170, 200, 240, 300],
+          school:     [90, 130, 170, 230, 300, 360],
+          hospital:   [150, 350, 450, 550, 650, 800],
+        },
+
+        CLASS_COLORS: {
+          A: { class: 'A', color: 'bg-green-700', eValueColor: 'text-green-600' },
+          B: { class: 'B', color: 'bg-green-500', eValueColor: 'text-green-500' },
+          C: { class: 'C', color: 'bg-lime-500', eValueColor: 'text-lime-500' },
+          D: { class: 'D', color: 'bg-yellow-400', eValueColor: 'text-yellow-500' },
+          E: { class: 'E', color: 'bg-orange-500', eValueColor: 'text-orange-500' },
+          F: { class: 'F', color: 'bg-red-500', eValueColor: 'text-red-500' },
+          G: { class: 'G', color: 'bg-red-700', eValueColor: 'text-red-700' }
+        },
+
+        // Returns the table of class limits based on building type and area
+        getThresholds(type, area) {
+          if (type !== 'detached') {
+            return this.FIXED_THRESHOLDS[type] || [999, 999, 999, 999, 999, 999];
+          }
+          
+          // Detached house (1 a-c) - Area-dependent logic (Regulation 1048/2017)
+          const safeArea = Math.max(0, area || 0); // Ensure zero or positive number
+          if (safeArea < 50) {
+              // Returns limits that result in class G if the area is too small
+              return [9999, 9999, 9999, 9999, 9999, 9999]; 
+          }
+
+          if (safeArea >= 600) {
+            return [70, 106, 130, 210, 340, 410];
+          } else if (safeArea >= 150) {
+            const A = 83 - 0.02 * safeArea;
+            const B = 131 - 0.04 * safeArea;
+            const C = 173 - 0.07 * safeArea;
+            const D = 253 - 0.07 * safeArea;
+            const E = 383 - 0.07 * safeArea;
+            const F = 453 - 0.07 * safeArea;
+            return [A, B, C, D, E, F];
+          } else { 
+            const A = 110 - 0.2 * safeArea;
+            const B = 215 - 0.6 * safeArea;
+            const C = 252 - 0.6 * safeArea;
+            const D = 332 - 0.6 * safeArea;
+            const E = 462 - 0.6 * safeArea;
+            const F = 532 - 0.6 * safeArea;
+            return [A, B, C, D, E, F];
+          }
+        },
+
+        // Net electricity consumption (purchased electricity)
+        get netPurchasedElectricity() {
+          const propElec = Math.max(0, this.propertyElectricity || 0);
+          const heatElec = Math.max(0, this.heatingSystemElectricity || 0);
+          const solar = Math.max(0, this.solarProduction || 0);
+
+          const totalElectricConsumption = propElec + heatElec;
+          return Math.max(0, totalElectricConsumption - solar);
+        },
+
+        // E-value calculator (kWh/m²a) - uses fixed 2018 coefficients
+        get eValue() {
+          if (!this.area || this.area <= 0) return 0;
+          
+          const coeffs = this.COEFF_2018;
+
+          const dh = Math.max(0, this.districtHeating || 0);
+          const oil = Math.max(0, this.lightFuelOil || 0);
+          const renewable = Math.max(0, this.renewableSolid || 0);
+
+          // Weighted delivered energy
+          const weightedElectricity = this.netPurchasedElectricity * coeffs.electricity;
+          const weightedDH = dh * coeffs.districtHeating;
+          const weightedOil = oil * coeffs.lightFuelOil;
+          const weightedRenewable = renewable * coeffs.renewableSolid;
+          
+          const totalWeightedEnergy = weightedElectricity + weightedDH + weightedOil + weightedRenewable;
+          
+          return totalWeightedEnergy / this.area;
+        },
+
+        // Energy efficiency class
+        get energyClass() {
+          const eValue = this.eValue;
+          const t = this.getThresholds(this.buildingType, this.area);
+          
+          // Return G/default if calculation is not possible
+          if (!t || eValue === 0 || !this.area || this.area <= 0) {
+            return this.CLASS_COLORS.G; 
+          }
+
+          const [A,B,C,D,E,F] = t;
+          
+          let resultClassKey;
+          
+          if (eValue <= A) resultClassKey = 'A';
+          else if (eValue <= B) resultClassKey = 'B';
+          else if (eValue <= C) resultClassKey = 'C';
+          else if (eValue <= D) resultClassKey = 'D';
+          else if (eValue <= E) resultClassKey = 'E';
+          else if (eValue <= F) resultClassKey = 'F';
+          else resultClassKey = 'G';
+          
+          return this.CLASS_COLORS[resultClassKey];
+        },
+        
+        // Checks if any input is used
+        isAnyInputUsed() {
+            return (this.area !== null && this.area > 0) || (Math.max(0, this.propertyElectricity || 0) > 0) || (Math.max(0, this.heatingSystemElectricity || 0) > 0) || (Math.max(0, this.districtHeating || 0) > 0) || (Math.max(0, this.lightFuelOil || 0) > 0) || (Math.max(0, this.renewableSolid || 0) > 0) || (Math.max(0, this.solarProduction || 0) > 0);
+        }
+      }
+    }
+  </script>
+</body>
+</html>
